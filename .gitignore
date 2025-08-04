@@ -135,3 +135,7 @@ cython_debug/
 # env
 .env
 .env.local
+
+# Project specific ignores
+errors.md
+prd.md

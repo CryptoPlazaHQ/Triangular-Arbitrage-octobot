@@ -85,7 +85,7 @@ def get_best_opportunity(tickers: List[ShortTicker], max_cycle: int = 10) -> Tup
 
     if best_cycle is not None:
         best_cycle = [
-            ShortTicker(symbols.Symbol(f"{ticker.symbol.quote}/{ticker.symbol.base}"), ticker.last_price, reversed=True)
+            ShortTicker(symbols.Symbol(f"{ticker.symbol.quote}/{ticker.symbol.base}"), 1 / ticker.last_price, reversed=True)
             if ticker.reversed else ticker
             for ticker in best_cycle
         ]

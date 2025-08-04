@@ -1,4 +1,10 @@
 ccxt
 networkx[default]
+streamlit
+pandas
+psycopg2-binary
+python-dotenv
+SQLAlchemy
+requests
 
 OctoBot-Commons>=1.9, <1.10
