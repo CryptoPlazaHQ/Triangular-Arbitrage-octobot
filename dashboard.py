@@ -8,32 +8,24 @@ import requests
 
 from triangular_arbitrage import detector, database
 
-# --- Database Initialization ---
-database.init_db()
-
-# --- Page Configuration ---
+# --- Page Configuration & Initialization ---
 st.set_page_config(
     page_title="Arbitrage Board by CryptoPlaza",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+database.init_db()
 
 # --- Static Assets & Constants ---
 LOGO_URL = "https://raw.githubusercontent.com/CryptoPlazaHQ/Stock/main/cryptoplaza_logo_white.png"
 EXCHANGES = sorted([
-    "binance", "binanceus", "kraken", "coinbasepro",
-    "binancecoinm", "binanceusdm", "bingx", "bit2c", "bitbank", "bitbns", "bitfinex", "bitflyer",
-    "bitget", "bithumb", "bitmart", "bitmex", "bitopro", "bitrue", "bitso", "bitstamp", "bitteam",
-    "bittrade", "bitvavo", "blockchaincom", "blofin", "btcalpha", "btcbox", "btcmarkets", "btcturk",
+    "binance", "binanceus", "kraken", "coinbasepro", "binancecoinm", "binanceusdm",
     "bybit", "cex", "coinbase", "coinbaseexchange", "coinbaseinternational", "coincatch", "coincheck",
     "coinex", "coinmate", "coinmetro", "coinone", "coinsph", "coinspot", "cryptocom", "cryptomus",
     "defx", "delta", "deribit", "digifinex", "ellipx", "exmo", "fmfwio", "foxbit", "gate", "gemini",
     "hashkey", "hitbtc", "hollaex", "htx", "hyperliquid", "independentreserve", "indodax",
-    "krakenfutures", "kucoin", "kucoinfutures", "latoken", "lbank", "luno", "mercado", "mexc",
-    "modetrade", "myokx", "ndax", "novadax", "oceanex", "okcoin", "okx", "okxus", "onetrading",
-    "oxfun", "p2b", "paradex", "paymium", "phemex", "poloniex", "probit", "timex", "tokocrypto",
-    "tradeogre", "upbit", "vertex", "wavesexchange", "whitebit", "woo", "woofipro", "xt", "yobit", "zaif"
+    "krakenfutures", "kucoin", "kucoinfutures"
 ])
 
 # --- Asset Handling ---
@@ -81,47 +73,62 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# --- Asyncio Event Loop Management ---
-def get_or_create_eventloop():
-    try:
-        return asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        return loop
-
 # --- Data Caching & Fetching ---
 @st.cache_data(ttl=30)
 def find_arbitrage_opportunities(exchange_name):
     try:
-        loop = get_or_create_eventloop()
-        opportunities, profit = loop.run_until_complete(detector.run_detection(exchange_name))
+        opportunities, profit = asyncio.run(detector.run_detection(exchange_name))
         return opportunities, profit, datetime.now()
     except Exception as e:
-        st.error(f"❌ Error connecting to {exchange_name}: {e}")
-        return None, None, datetime.now()
+        # This error will be displayed in the main body of the app.
+        return None, None, datetime.now(), str(e)
 
-# --- Sidebar ---
+# --- Sidebar & State Management ---
+
+def handle_exchange_change():
+    """Callback to clear cache when the exchange is changed."""
+    st.cache_data.clear()
+
 with st.sidebar:
     st.title("🤖 Triangular Arbitrage")
-    exchange = st.selectbox("Select Exchange", EXCHANGES)
+    
+    # Use session state to keep track of the selected exchange
+    if 'exchange' not in st.session_state:
+        st.session_state.exchange = EXCHANGES[0]
+
+    exchange = st.selectbox(
+        "Select Exchange", 
+        EXCHANGES, 
+        key='exchange', 
+        on_change=handle_exchange_change
+    )
+    
     st.markdown("---")
     st.markdown("### ⚙️ Refresh Settings")
     auto_refresh = st.checkbox("Enable Auto-Refresh", value=True)
     refresh_interval = st.slider("Interval (seconds)", 10, 60, 30, 5)
+    
     if st.button("🔄 Refresh Now", use_container_width=True):
-        st.cache_data.clear()
+        handle_exchange_change() # Clear cache on manual refresh too
         st.rerun()
+
     st.markdown("---")
     st.caption("Last updated:")
     last_updated_placeholder = st.empty()
 
 # --- Main Body ---
 st.markdown('<div class="main-title">Arbitrage Dashboard</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="exchange-subtitle">{exchange.upper()}</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="exchange-subtitle">{st.session_state.exchange.upper()}</div>', unsafe_allow_html=True)
 
-with st.spinner(f"Scanning {exchange} for opportunities..."):
-    opportunities, profit, last_updated = find_arbitrage_opportunities(exchange)
+with st.spinner(f"Scanning {st.session_state.exchange} for opportunities..."):
+    fetch_result = find_arbitrage_opportunities(st.session_state.exchange)
+
+# Unpack results, including a potential error message
+if len(fetch_result) == 4:
+    opportunities, profit, last_updated, error_message = fetch_result
+else:
+    opportunities, profit, last_updated = fetch_result
+    error_message = None
 
 def get_latency_color(ts):
     age = datetime.now() - ts
@@ -134,16 +141,18 @@ last_updated_placeholder.markdown(
     unsafe_allow_html=True
 )
 
-if opportunities:
+if error_message:
+    st.error(f"❌ Error connecting to {st.session_state.exchange}: {error_message}")
+elif opportunities:
     profit_percentage = (profit - 1) * 100
-    database.save_arbitrage_run(exchange, profit_percentage, opportunities)
+    database.save_arbitrage_run(st.session_state.exchange, profit_percentage, opportunities)
 
     col1, col2 = st.columns([1, 2])
     with col1:
         st.metric(label="🎯 Est. Profit Opportunity", value=f"{profit_percentage:.4f}%")
     with col2:
         st.markdown("##### Profit Trend (Last 100 Scans)")
-        history_df = database.get_historical_profit_trend(exchange, limit=100)
+        history_df = database.get_historical_profit_trend(st.session_state.exchange, limit=100)
         if not history_df.empty:
             st.line_chart(history_df.set_index('timestamp')['profit_percentage'], use_container_width=True)
 
@@ -172,7 +181,7 @@ if opportunities:
     st.download_button(
         label="💾 Download Sequence as CSV",
         data=pd.DataFrame(trade_data_for_export).to_csv(index=False).encode("utf-8"),
-        file_name=f"arbitrage_{exchange}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        file_name=f"arbitrage_{st.session_state.exchange}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
         mime="text/csv",
         use_container_width=True
     )
