@@ -60,15 +60,31 @@ def save_arbitrage_run(exchange, profit_percentage, opportunities):
             )
         conn.commit()
 
-def get_historical_profit_trend(exchange, limit=100):
-    """Retrieves the profit trend for a given exchange from the database."""
-    query = text("""
+def get_historical_profit_trend(exchange, limit=100, start_date=None, end_date=None):
+    """Retrieves the profit trend for a given exchange from the database, with optional date filtering."""
+    params = {"exchange": exchange, "limit": limit}
+    
+    # Base query
+    query_str = """
     SELECT timestamp, profit_percentage 
     FROM arbitrage_runs 
     WHERE exchange = :exchange
-    ORDER BY timestamp DESC
-    LIMIT :limit;
-    """)
+    """
+    
+    # Append date filters if provided
+    if start_date:
+        query_str += " AND timestamp >= :start_date"
+        params["start_date"] = start_date
+    if end_date:
+        # Add 1 day to the end_date to make the filter inclusive of the selected day
+        query_str += " AND timestamp < :end_date + INTERVAL '1 day'"
+        params["end_date"] = end_date
+        
+    query_str += " ORDER BY timestamp DESC LIMIT :limit;"
+    
+    query = text(query_str)
+    
     with engine.connect() as conn:
-        df = pd.read_sql(query, conn, params={"exchange": exchange, "limit": limit})
+        df = pd.read_sql(query, conn, params=params)
+        
     return df.sort_values(by="timestamp")

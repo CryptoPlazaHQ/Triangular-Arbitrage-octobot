@@ -8,3 +8,5 @@ SQLAlchemy
 requests
 
 OctoBot-Commons>=1.9, <1.10
+
+plotly
