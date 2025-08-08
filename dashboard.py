@@ -20,8 +20,7 @@ database.init_db()
 # --- Static Assets & Constants ---
 LOGO_URL = "https://raw.githubusercontent.com/CryptoPlazaHQ/Stock/main/cryptoplaza_logo_white.png"
 EXCHANGES = sorted([
-    "binance", "binanceus", "kraken", "coinbasepro", "binancecoinm", "binanceusdm",
-    "bybit", "cex", "coinbase", "coinbaseexchange", "coinbaseinternational", "coincatch", "coincheck",
+    "binanceus", "kraken", "coinbasepro","cex", "coinbase", "coinbaseexchange", "coinbaseinternational",
     "coinex", "coinmate", "coinmetro", "coinone", "coinsph", "coinspot", "cryptocom", "cryptomus",
     "defx", "delta", "deribit", "digifinex", "ellipx", "exmo", "fmfwio", "foxbit", "gate", "gemini",
     "hashkey", "hitbtc", "hollaex", "htx", "hyperliquid", "independentreserve", "indodax",
