@@ -1,0 +1,9 @@
+feat: Enhance dashboard UI/UX and add feature document
+
+- Implement interactive Plotly chart for historical profit trends with a highlighted latest point.
+- Add expandable container for the chart to improve layout management.
+- Introduce date range and data point limit controls for the chart.
+- Refactor dashboard.py for improved readability and maintenance.
+- Update database.py to support date-based filtering.
+- Add plotly to requirements.txt.
+- Add feature requirement document (frd.md).

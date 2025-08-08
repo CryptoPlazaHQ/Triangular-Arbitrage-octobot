@@ -28,7 +28,7 @@ EXCHANGES = sorted([
     "krakenfutures", "kucoin", "kucoinfutures"
 ])
 
-# --- Asset Handling ---
+# --- Asset Handling & CSS ---
 @st.cache_data
 def get_logo_base64(url):
     try:
@@ -41,32 +41,85 @@ def get_logo_base64(url):
 def load_css():
     st.markdown(f'''
     <style>
-        body {{ background-color: #0E1117; color: #FAFAFA; }}
-        .main-title {{ font-size: 2.5rem; font-weight: bold; color: #F5F5F5; margin-bottom: 0.2rem; }}
-        .exchange-subtitle {{ font-size: 1.8rem; color: #00A79D; margin-bottom: 1.5rem; }}
-        [data-testid="stMetricValue"] {{ color: #00FF41; }}
-        .metric-card {{
-            padding: 1.5rem; border-radius: 0.75rem; background: #1E222A;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4); margin-bottom: 1rem; color: white;
-            border-left: 5px solid #444; transition: transform 0.2s;
+        :root {{
+            --primary-bg: #0A0E1A;
+            --card-bg: #1A1F2E;
+            --accent-green: #00D084;
+            --accent-red: #FF6B6B;
+            --accent-blue: #4ECDC4;
+            --text-primary: #FFFFFF;
+            --text-secondary: #B0B8C1;
+            --border-subtle: #2D3748;
         }}
-        .metric-card:hover {{ transform: scale(1.02); }}
-        .buy-card {{ border-left-color: #00FF41; }}
-        .sell-card {{ border-left-color: #FF4B4B; }}
-        .step-number {{ font-weight: bold; font-size: 1.5rem; color: #888; margin-bottom: 0.5rem; }}
-        .trade-info {{ font-size: 1.1rem; }}
-        .trade-info strong {{ color: #00A79D; }}
+        body {{ background-color: var(--primary-bg); color: var(--text-primary); }}
+        .main-title {{ font-size: 2.5rem; font-weight: bold; color: var(--text-primary); margin-bottom: 0.2rem; }}
+        .exchange-subtitle {{ font-size: 1.8rem; color: var(--accent-blue); margin-bottom: 1.5rem; }}
+        [data-testid="stMetricValue"] {{ color: var(--accent-green); }}
+        
+        .opportunity-card {{
+            background-color: var(--card-bg);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border-subtle);
+            transition: box-shadow 0.3s ease-in-out;
+        }}
+        .opportunity-card:hover {{
+            box-shadow: 0 8px 25px rgba(78, 205, 196, 0.15);
+        }}
+        .card-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }}
+        .profit-display {{
+            font-size: 1.8rem;
+            font-weight: bold;
+        }}
+        .profit-green {{ color: var(--accent-green); }}
+        .profit-blue {{ color: var(--accent-blue); }}
+        .path-display {{
+            font-family: monospace;
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+        }}
+        .card-footer {{
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            border-top: 1px solid var(--border-subtle);
+            padding-top: 1rem;
+            margin-top: 1rem;
+        }}
+        .step-card {{
+            background: var(--border-subtle);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+        }}
+        .trade-info strong {{
+            color: var(--text-primary);
+        }}
         .market-symbol {{
-            font-family: 'monospace'; font-size: 1.2rem; background-color: #2b303b;
-            padding: 0.2rem 0.5rem; border-radius: 0.3rem;
+            font-family: 'monospace';
+            font-size: 1.1rem;
+            background-color: var(--accent-blue);
+            color: var(--text-primary); /* Changed to white for contrast */
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.3rem;
+            font-weight: bold;
         }}
-        .latency-fresh {{ color: #00FF41; }}
-        .latency-stale {{ color: #FFA500; }}
-        .latency-old {{ color: #FF4B4B; }}
-        .footer {{
-            text-align: center; padding: 2rem 0; color: #888;
+        .price-display {{
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            font-weight: 500;
         }}
-        .footer img {{ width: 150px; margin-bottom: 1rem; }}
+        .buy-card-step {{
+            border-left: 5px solid var(--accent-green);
+        }}
+        .sell-card-step {{
+            border-left: 5px solid var(--accent-red);
+        }}
     </style>
     ''', unsafe_allow_html=True)
 
@@ -74,16 +127,18 @@ def load_css():
 @st.cache_data(ttl=30)
 def find_arbitrage_opportunities(exchange_name):
     try:
-        opportunities, profit = asyncio.run(detector.run_detection(exchange_name))
-        return opportunities, profit, datetime.now()
+        # Call the actual detection logic from detector.py
+        best_opportunity, best_profit, all_opportunities = asyncio.run(detector.run_detection(exchange_name))
+        
+        return best_opportunity, best_profit, all_opportunities, datetime.now(), None # No error message if successful
     except Exception as e:
-        return None, None, datetime.now(), str(e)
+        return None, None, [], datetime.now(), str(e)
 
 # --- UI Components ---
 
 def display_sidebar():
     with st.sidebar:
-        st.title("🤖 Triangular Arbitrage")
+        st.title("🤖 Arbitrage Intelligence")
 
         if 'exchange' not in st.session_state:
             st.session_state.exchange = EXCHANGES[0]
@@ -103,43 +158,57 @@ def display_sidebar():
         if st.button("🔄 Refresh Now", use_container_width=True):
             handle_exchange_change()
             st.rerun()
+        
+        st.markdown("--- ")
+        st.markdown("### 🔎 Filter Opportunities")
+        
+        # Initialize session state for filters if they don't exist
+        if 'search_text' not in st.session_state:
+            st.session_state.search_text = ""
+        if 'min_profit' not in st.session_state:
+            st.session_state.min_profit = 2.5
+
+        st.session_state.search_text = st.text_input("Search by currency...", st.session_state.search_text)
+        st.session_state.min_profit = st.slider("Minimum Profit (%)", 0.0, 10.0, st.session_state.min_profit, 0.1)
 
         st.markdown("---")
         st.markdown("### 📊 Chart Controls")
-        limit = st.slider("Recent Scans to Display", 50, 500, 100, 10)
-        
-        today = date.today()
-        last_month = today - timedelta(days=30)
-        start_date = st.date_input("Start Date", last_month)
-        end_date = st.date_input("End Date", today)
+        # Initialize session state for chart controls
+        if 'limit' not in st.session_state:
+            st.session_state.limit = 100
+        if 'start_date' not in st.session_state:
+            st.session_state.start_date = date.today() - timedelta(days=30)
+        if 'end_date' not in st.session_state:
+            st.session_state.end_date = date.today()
 
+        st.session_state.limit = st.slider("Recent Scans to Display", 50, 500, st.session_state.limit, 10)
+        st.session_state.start_date = st.date_input("Start Date", st.session_state.start_date)
+        st.session_state.end_date = st.date_input("End Date", st.session_state.end_date)
 
         st.markdown("---")
         st.caption("Last updated:")
-        last_updated_placeholder = st.empty()
+        # last_updated_placeholder is now created in main and updated there.
+        # This function no longer returns last_updated_placeholder
 
-    return exchange, auto_refresh, refresh_interval, limit, start_date, end_date, last_updated_placeholder
+    return exchange, auto_refresh, refresh_interval
 
 def display_historical_chart(exchange, limit, start_date, end_date):
-    with st.expander("📈 View Profitability Trend", expanded=True):
-        history_df = database.get_historical_profit_trend(exchange, limit, start_date, end_date)
-        
-        if not history_df.empty:
+    history_df = database.get_historical_profit_trend(exchange, limit, start_date, end_date)
+    
+    if not history_df.empty:
+        with st.expander("📈 View Profitability Trend", expanded=False):
             fig = px.line(
                 history_df, x='timestamp', y='profit_percentage',
                 title=f'Profitability Over Time for {exchange.upper()}',
                 labels={'timestamp': 'Time', 'profit_percentage': 'Profit %'}
             )
-            
-            # Add a marker for the most recent point
             last_point = history_df.iloc[-1]
             fig.add_scatter(
                 x=[last_point['timestamp']], y=[last_point['profit_percentage']],
                 mode='markers',
-                marker=dict(color='#00FF41', size=10, symbol='diamond'),
+                marker=dict(color='var(--accent-green)', size=10, symbol='diamond'),
                 name='Latest'
             )
-            
             fig.update_layout(
                 template='plotly_dark',
                 xaxis_title=None,
@@ -148,36 +217,77 @@ def display_historical_chart(exchange, limit, start_date, end_date):
                 margin=dict(l=20, r=20, t=40, b=20)
             )
             st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No historical data available for the selected criteria.")
+
+def _extract_clean_path(opportunity):
+    path = []
+    for opp in opportunity:
+        if not path:
+            path.append(opp.symbol.base)
+        if opp.symbol.quote not in path:
+            path.append(opp.symbol.quote)
+    # Ensure the path loops back to the start
+    if path[0] != path[-1]:
+        # Find the next logical step to close the loop
+        for opp in opportunity:
+            if opp.symbol.base == path[-1] and opp.symbol.quote == path[0]:
+                break
         else:
-            st.info("No historical data available for the selected criteria.")
+            # If no direct loop, just append the start
+            path.append(path[0])
+    return " → ".join(path)
 
-def display_trade_sequence(opportunities):
-    st.markdown("## 📦 Trade Sequence")
-    trade_data_for_export = []
-    for i, opp in enumerate(opportunities):
-        action = "BUY" if opp.reversed else "SELL"
-        market_symbol = f"{opp.symbol.base}/{opp.symbol.quote}"
-        st.markdown(f'''
-        <div class="metric-card {"buy-card" if action == "BUY" else "sell-card"}">
-            <div class="step-number">Step {i+1}</div>
-            <div class="trade-info">
-                <strong>Action:</strong> {action} <span class="market-symbol">{market_symbol}</span><br>
-                <strong>Price:</strong> {opp.last_price:.8f} {opp.symbol.quote}
-            </div>
+def display_opportunity_cards(all_opportunities):
+    search_text = st.session_state.search_text.upper()
+    min_profit = st.session_state.min_profit
+
+    filtered_opportunities = []
+    for opp, profit in all_opportunities:
+        if (profit - 1) * 100 >= min_profit:
+            path = _extract_clean_path(opp)
+            if not search_text or search_text in path:
+                filtered_opportunities.append((opp, profit, path))
+
+    if not filtered_opportunities:
+        st.info("No opportunities match your current filter criteria.")
+        return
+
+    st.markdown(f"**Showing {len(filtered_opportunities)} of {len(all_opportunities)} opportunities**")
+
+    for i, (opportunity, profit, path) in enumerate(filtered_opportunities):
+        profit_percentage = (profit - 1) * 100
+        # The color class logic here assumes all_opportunities is sorted by profit, and the first one is the "best"
+        # If all_opportunities only contains the best, then this logic is fine.
+        color_class = "profit-green" if i == 0 and profit_percentage == (all_opportunities[0][1] - 1) * 100 else "profit-blue"
+
+        header_html = f"""
+        <div class="card-header">
+            <div class="profit-display {color_class}">{profit_percentage:.2f}%</div>
+            <div class="path-display">{path}</div>
         </div>
-        ''', unsafe_allow_html=True)
-        trade_data_for_export.append({
-            "Step": i + 1, "Market": market_symbol, "Action": action,
-            "Base": opp.symbol.base, "Quote": opp.symbol.quote, "Price": opp.last_price
-        })
+        """
 
-    st.download_button(
-        label="💾 Download Sequence as CSV",
-        data=pd.DataFrame(trade_data_for_export).to_csv(index=False).encode("utf-8"),
-        file_name=f"arbitrage_{st.session_state.exchange}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
+        with st.container():
+            st.markdown(f'<div class="opportunity-card">{header_html}</div>', unsafe_allow_html=True)
+            with st.expander("View Trade Steps"):
+                for j, opp in enumerate(opportunity):
+                    action = "BUY" if opp.reversed else "SELL"
+                    market_symbol = f"{opp.symbol.base}/{opp.symbol.quote}"
+                    
+                    # Determine step card color based on action
+                    step_card_class = "buy-card-step" if action == "BUY" else "sell-card-step"
+
+                    st.markdown(f'''
+                    <div class="step-card {step_card_class}">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div class="trade-info">
+                                <strong>Step {j+1}:</strong> {action} <span class="market-symbol">{market_symbol}</span>
+                            </div>
+                            <span class="price-display">{opp.last_price:.8f}</span>
+                        </div>
+                    </div>
+                    ''', unsafe_allow_html=True)
 
 def display_footer():
     logo_base64 = get_logo_base64(LOGO_URL)
@@ -201,19 +311,15 @@ def display_footer():
 def main():
     load_css()
     
-    exchange, auto_refresh, refresh_interval, limit, start_date, end_date, last_updated_placeholder = display_sidebar()
+    exchange, auto_refresh, refresh_interval = display_sidebar()
 
     st.markdown('<div class="main-title">Arbitrage Dashboard</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="exchange-subtitle">{exchange.upper()}</div>', unsafe_allow_html=True)
 
-    with st.spinner(f"Scanning {exchange} for opportunities..."):
-        fetch_result = find_arbitrage_opportunities(exchange)
+    last_updated_placeholder = st.empty() # Moved placeholder creation here
 
-    if len(fetch_result) == 4:
-        opportunities, profit, last_updated, error_message = fetch_result
-    else:
-        opportunities, profit, last_updated = fetch_result
-        error_message = None
+    with st.spinner(f"Scanning {exchange} for opportunities..."):
+        best_opportunity, best_profit, all_opportunities, last_updated, error_message = find_arbitrage_opportunities(exchange)
 
     def get_latency_color(ts):
         age = datetime.now() - ts
@@ -228,19 +334,21 @@ def main():
 
     if error_message:
         st.error(f"❌ Error connecting to {exchange}: {error_message}")
-    elif opportunities:
-        profit_percentage = (profit - 1) * 100
-        database.save_arbitrage_run(exchange, profit_percentage, opportunities)
+    elif best_opportunity:
+        profit_percentage = (best_profit - 1) * 100
+        database.save_arbitrage_run(exchange, profit_percentage, best_opportunity) # Save the best opportunity
 
         st.metric(label="🎯 Est. Profit Opportunity", value=f"{profit_percentage:.4f}%")
         
-        display_historical_chart(exchange, limit, start_date, end_date)
+        # Pass chart control values from session state
+        display_historical_chart(exchange, st.session_state.limit, st.session_state.start_date, st.session_state.end_date)
         
         st.markdown("---")
-        display_trade_sequence(opportunities)
+        display_opportunity_cards(all_opportunities) # Display all (or best) opportunities
     else:
         st.success("✅ No profitable arbitrage opportunities detected at the moment.")
-        display_historical_chart(exchange, limit, start_date, end_date)
+        # Pass chart control values from session state even if no opportunities
+        display_historical_chart(exchange, st.session_state.limit, st.session_state.start_date, st.session_state.end_date)
 
     display_footer()
 
